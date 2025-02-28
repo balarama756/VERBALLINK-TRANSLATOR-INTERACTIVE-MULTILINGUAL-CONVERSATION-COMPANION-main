@@ -2,40 +2,34 @@ import streamlit as st
 import speech_recognition as sr
 from gtts import gTTS
 import os
-import pygame
 from googletrans import Translator
 import time
-import threading
-import queue
+import pygame
+from io import BytesIO
 
 class AudioPlayer:
     def __init__(self):
-        pygame.mixer.init(frequency=44100)
-        self.audio_queue = queue.Queue()
-        self.play_thread = threading.Thread(target=self._play_audio_worker, daemon=True)
-        self.play_thread.start()
-
-    def _play_audio_worker(self):
-        while True:
-            audio_file = self.audio_queue.get()
-            if audio_file is None:
-                break
-            try:
-                pygame.mixer.music.load(audio_file)
-                pygame.mixer.music.play()
-                while pygame.mixer.music.get_busy():
-                    pygame.time.Clock().tick(10)
-                pygame.mixer.music.unload()
-                os.remove(audio_file)
-            except Exception as e:
-                st.error(f"Audio playback error: {e}")
+        pygame.mixer.init()
 
     def play_text(self, text, lang='en'):
         try:
+            # Generate speech
             tts = gTTS(text=text, lang=lang, slow=False)
-            temp_file = f"temp_audio_{time.time()}.mp3"
+            
+            # Save to temporary file
+            temp_file = f"temp_{time.time()}.mp3"
             tts.save(temp_file)
-            self.audio_queue.put(temp_file)
+            
+            # Play audio
+            pygame.mixer.music.load(temp_file)
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                pygame.time.Clock().tick(10)
+            
+            # Clean up
+            pygame.mixer.music.unload()
+            os.remove(temp_file)
+            
         except Exception as e:
             st.error(f"Text-to-speech error: {e}")
 
