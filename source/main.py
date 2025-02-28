@@ -47,11 +47,30 @@ def initialize_recognizer():
     return r
 
 def recognize_speech(recognizer, source):
+    """Enhanced speech recognition with multiple attempts"""
     try:
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)
-        audio = recognizer.listen(source, timeout=3, phrase_time_limit=5)
-        text = recognizer.recognize_google(audio)
-        return text
+        # Adjust microphone for ambient noise
+        recognizer.adjust_for_ambient_noise(source, duration=1)
+        
+        # Listen for speech with adjusted parameters
+        audio = recognizer.listen(
+            source,
+            timeout=3,
+            phrase_time_limit=5
+        )
+        
+        # Try multiple language models for better accuracy
+        for lang in ['en-IN', 'en-US', 'en-GB']:
+            try:
+                text = recognizer.recognize_google(audio, language=lang)
+                if text and len(text.strip()) > 0:
+                    return text.strip()
+            except:
+                continue
+        
+        # If specific language models fail, try auto-detection
+        return recognizer.recognize_google(audio)
+        
     except sr.UnknownValueError:
         return None
     except sr.RequestError:
@@ -64,18 +83,63 @@ def recognize_speech(recognizer, source):
         return None
 
 def translate_text(text, src_lang, dest_lang, retries=3):
-    translator = Translator()
+    """Enhanced translation with better accuracy and error handling"""
+    # List of translation services to try
+    services = [
+        'translate.google.com',
+        'translate.google.co.in',
+        'translate.google.co.uk',
+        'translate.google.co.jp'
+    ]
+    
+    # Clean and prepare the text
+    text = text.strip()
+    if not text:
+        return None
+        
     for attempt in range(retries):
         try:
-            translation = translator.translate(text, src=src_lang, dest=dest_lang)
+            # Create a new translator for each attempt
+            translator = Translator(service_urls=[services[attempt % len(services)]])
+            
+            # First attempt: direct translation
+            translation = translator.translate(
+                text,
+                src=src_lang,
+                dest=dest_lang
+            )
+            
             if translation and translation.text:
-                return translation.text
-            time.sleep(0.5)
+                # Verify translation quality with back-translation
+                back_translation = translator.translate(
+                    translation.text,
+                    src=dest_lang,
+                    dest=src_lang
+                )
+                
+                # If back-translation is similar to original, return the translation
+                if back_translation and back_translation.text.lower() in text.lower() or text.lower() in back_translation.text.lower():
+                    return translation.text
+                
+                # If verification failed, try alternative translation
+                alternative = translator.translate(
+                    text,
+                    src='auto',  # Let Google detect the source language
+                    dest=dest_lang
+                )
+                
+                if alternative and alternative.text:
+                    return alternative.text
+                    
+            time.sleep(0.5)  # Small delay between attempts
+            
         except Exception as e:
             if attempt == retries - 1:
-                raise e
-            time.sleep(1)
+                st.error(f"Translation failed: {str(e)}")
+                return None
+            time.sleep(1)  # Longer delay after error
             continue
+            
     return None
 
 def main():
