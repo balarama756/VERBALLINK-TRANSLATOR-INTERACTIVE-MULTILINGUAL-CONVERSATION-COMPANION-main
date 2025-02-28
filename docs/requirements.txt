@@ -1,9 +1,6 @@
-streamlit==1.22.0
 SpeechRecognition==3.8.1
 gTTS==2.3.1
 pygame==2.1.2
+streamlit==1.22.0
 googletrans==4.0.0-rc1
 PyAudio==0.2.13
-# Additional dependencies for cloud deployment
-portaudio19-dev
-python3-all-dev
