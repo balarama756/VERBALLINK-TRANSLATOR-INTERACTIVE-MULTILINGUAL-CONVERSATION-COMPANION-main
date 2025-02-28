@@ -9,29 +9,38 @@ from io import BytesIO
 
 class AudioPlayer:
     def __init__(self):
+        # Initialize pygame mixer for audio
         pygame.mixer.init()
 
     def play_text(self, text, lang='en'):
         try:
-            # Generate speech
+            # Generate speech using gTTS
             tts = gTTS(text=text, lang=lang, slow=False)
             
             # Save to temporary file
             temp_file = f"temp_{time.time()}.mp3"
             tts.save(temp_file)
             
-            # Play audio
+            # Play the audio using pygame
             pygame.mixer.music.load(temp_file)
             pygame.mixer.music.play()
+            
+            # Wait for the audio to finish
             while pygame.mixer.music.get_busy():
                 pygame.time.Clock().tick(10)
             
-            # Clean up
+            # Cleanup
             pygame.mixer.music.unload()
             os.remove(temp_file)
             
         except Exception as e:
             st.error(f"Text-to-speech error: {e}")
+
+    def __del__(self):
+        try:
+            pygame.mixer.quit()
+        except:
+            pass
 
 def initialize_recognizer():
     r = sr.Recognizer()
@@ -77,61 +86,37 @@ def recognize_speech(recognizer, source):
         return None
 
 def translate_text(text, src_lang, dest_lang, retries=3):
-    """Enhanced translation with better accuracy and error handling"""
-    # List of translation services to try
-    services = [
-        'translate.google.com',
-        'translate.google.co.in',
-        'translate.google.co.uk',
-        'translate.google.co.jp'
-    ]
-    
-    # Clean and prepare the text
-    text = text.strip()
+    """Enhanced translation with better error handling and retries"""
     if not text:
         return None
         
     for attempt in range(retries):
         try:
-            # Create a new translator for each attempt
-            translator = Translator(service_urls=[services[attempt % len(services)]])
+            # Create a new translator instance for each attempt
+            translator = Translator(service_urls=[
+                'translate.google.com',
+                'translate.google.co.in',
+                'translate.google.co.uk'
+            ])
             
-            # First attempt: direct translation
+            # Add a small delay between retries
+            if attempt > 0:
+                time.sleep(1)
+            
+            # Perform translation
             translation = translator.translate(
-                text,
+                text=text,
                 src=src_lang,
                 dest=dest_lang
             )
             
             if translation and translation.text:
-                # Verify translation quality with back-translation
-                back_translation = translator.translate(
-                    translation.text,
-                    src=dest_lang,
-                    dest=src_lang
-                )
+                return translation.text
                 
-                # If back-translation is similar to original, return the translation
-                if back_translation and back_translation.text.lower() in text.lower() or text.lower() in back_translation.text.lower():
-                    return translation.text
-                
-                # If verification failed, try alternative translation
-                alternative = translator.translate(
-                    text,
-                    src='auto',  # Let Google detect the source language
-                    dest=dest_lang
-                )
-                
-                if alternative and alternative.text:
-                    return alternative.text
-                    
-            time.sleep(0.5)  # Small delay between attempts
-            
         except Exception as e:
+            st.error(f"Translation attempt {attempt + 1} failed: {str(e)}")
             if attempt == retries - 1:
-                st.error(f"Translation failed: {str(e)}")
                 return None
-            time.sleep(1)  # Longer delay after error
             continue
             
     return None
@@ -209,19 +194,31 @@ def main():
     
     if st.session_state.is_translating:
         placeholder = st.empty()
+        status_placeholder = st.empty()  # Add status placeholder
         recognizer = initialize_recognizer()
         
         with sr.Microphone() as source:
             while st.session_state.is_translating:
-                placeholder.info("Listening...")
+                status_placeholder.info("Listening...")
                 text = recognize_speech(recognizer, source)
                 
                 if text:
                     try:
+                        status_placeholder.info("Translating...")
+                        
+                        # Get language codes
+                        src_code = languages[source_lang]
+                        dest_code = languages[target_lang]
+                        
+                        # Debug info
+                        st.write(f"Source text: {text}")
+                        st.write(f"Source language: {src_code}")
+                        st.write(f"Target language: {dest_code}")
+                        
                         translation = translate_text(
                             text,
-                            src_lang=languages[source_lang],
-                            dest_lang=languages[target_lang]
+                            src_lang=src_code,
+                            dest_lang=dest_code
                         )
                         
                         if translation:
@@ -243,9 +240,11 @@ def main():
                                 translation,
                                 languages[target_lang]
                             )
+                        else:
+                            placeholder.error("Translation failed. Please try again.")
                             
                     except Exception as e:
-                        st.error(f"Translation error: {e}")
+                        st.error(f"Translation error: {str(e)}")
                         time.sleep(0.5)
                 
                 time.sleep(0.1)
