@@ -143,7 +143,10 @@ def translate_text(text, src_lang, dest_lang, retries=3):
     return None
 
 def main():
-    st.title("Real-Time Language Translator")
+    st.title("VerbalLink: Global Voice Bridge")
+    
+    # Add a subtitle for better context
+    st.markdown("##### Interactive Multilingual Conversation Companion")
     
     if 'audio_player' not in st.session_state:
         st.session_state.audio_player = AudioPlayer()
