@@ -4,13 +4,13 @@ from gtts import gTTS
 import os
 from googletrans import Translator
 import time
-import pygame
+import sounddevice as sd
+import soundfile as sf
 from io import BytesIO
 
 class AudioPlayer:
     def __init__(self):
-        # Initialize pygame mixer for audio
-        pygame.mixer.init()
+        self.sample_rate = 24000
 
     def play_text(self, text, lang='en'):
         try:
@@ -18,19 +18,15 @@ class AudioPlayer:
             tts = gTTS(text=text, lang=lang, slow=False)
             
             # Save to temporary file
-            temp_file = f"temp_{time.time()}.mp3"
+            temp_file = f"temp_{time.time()}.wav"
             tts.save(temp_file)
             
-            # Play the audio using pygame
-            pygame.mixer.music.load(temp_file)
-            pygame.mixer.music.play()
-            
-            # Wait for the audio to finish
-            while pygame.mixer.music.get_busy():
-                pygame.time.Clock().tick(10)
+            # Read and play the audio
+            data, samplerate = sf.read(temp_file)
+            sd.play(data, samplerate)
+            sd.wait()  # Wait until audio is finished playing
             
             # Cleanup
-            pygame.mixer.music.unload()
             os.remove(temp_file)
             
         except Exception as e:
@@ -38,7 +34,7 @@ class AudioPlayer:
 
     def __del__(self):
         try:
-            pygame.mixer.quit()
+            sd.stop()
         except:
             pass
 
