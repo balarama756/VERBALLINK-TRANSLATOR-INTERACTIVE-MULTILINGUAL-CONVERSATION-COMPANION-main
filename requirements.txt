@@ -1,2 +1,2 @@
 streamlit>=1.31.0
-googletrans==3.1.0a0 
+deep-translator>=1.11.4 

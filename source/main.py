@@ -1,5 +1,5 @@
 import streamlit as st
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 import time
 
 def translate_text(text, src_lang, dest_lang, retries=3):
@@ -9,28 +9,17 @@ def translate_text(text, src_lang, dest_lang, retries=3):
         
     for attempt in range(retries):
         try:
-            translator = Translator(service_urls=[
-                'translate.google.com',
-                'translate.google.co.in',
-                'translate.google.co.uk'
-            ])
+            translator = GoogleTranslator(source=src_lang, target=dest_lang)
+            translation = translator.translate(text)
             
-            if attempt > 0:
-                time.sleep(1)
-            
-            translation = translator.translate(
-                text=text,
-                src=src_lang,
-                dest=dest_lang
-            )
-            
-            if translation and translation.text:
-                return translation.text
+            if translation:
+                return translation
                 
         except Exception as e:
-            st.error(f"Translation attempt {attempt + 1} failed: {str(e)}")
             if attempt == retries - 1:
+                st.error(f"Translation failed: {str(e)}")
                 return None
+            time.sleep(1)
             continue
             
     return None
