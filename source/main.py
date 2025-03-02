@@ -153,9 +153,13 @@ def show_mic_permission_dialog():
 def main():
     st.title("VerbalLink: Global Voice Bridge")
     
-    # Add a subtitle for better context
-    st.markdown("##### Interactive Multilingual Conversation Companion")
-    
+    try:
+        # Test audio device availability
+        devices = sd.query_devices()
+    except Exception as e:
+        st.error("⚠️ Audio system not available in cloud environment")
+        st.info("💡 For voice features, please run the app locally using `streamlit run app.py`")
+        
     if 'audio_player' not in st.session_state:
         st.session_state.audio_player = AudioPlayer()
         

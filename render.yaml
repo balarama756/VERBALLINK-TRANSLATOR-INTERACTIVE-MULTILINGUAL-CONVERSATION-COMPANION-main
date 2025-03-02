@@ -3,12 +3,30 @@ services:
     name: verballink-translator
     env: python
     buildCommand: |
+      # Install system dependencies
       sudo apt-get update 
-      sudo apt-get install -y portaudio19-dev python3-all-dev libsndfile1 libasound2-dev
+      sudo apt-get install -y \
+        portaudio19-dev \
+        python3-all-dev \
+        libsndfile1 \
+        libasound2-dev \
+        libportaudio2 \
+        libportaudiocpp0 \
+        ffmpeg
+      
+      # Set PortAudio environment variables
+      export PORTAUDIO_PATH=/usr/lib/x86_64-linux-gnu/libportaudio.so.2
+      
+      # Upgrade pip and install requirements
       pip install --upgrade pip
       pip install -r requirements.txt
-    startCommand: streamlit run source/main.py
+    startCommand: |
+      # Set runtime environment variables
+      export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/:$LD_LIBRARY_PATH
+      streamlit run source/main.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.11
+      - key: LD_LIBRARY_PATH
+        value: /usr/lib/x86_64-linux-gnu/
     plan: free 
