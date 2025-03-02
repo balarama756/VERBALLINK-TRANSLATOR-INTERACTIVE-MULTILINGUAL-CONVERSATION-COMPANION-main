@@ -82,8 +82,22 @@ def save_audio_data(audio_data, sample_rate=16000):
         st.error(f"Audio conversion error: {str(e)}")
         return None
 
+def check_audio_available():
+    """Check if audio recording is available"""
+    try:
+        import sounddevice as sd
+        return True
+    except:
+        return False
+
 def live_translation(source_lang, target_lang, languages):
     """Handle live voice translation"""
+    if not check_audio_available():
+        st.error("❌ Live voice recording is not available in cloud environment")
+        st.info("💡 Please use the text translation or file upload option instead")
+        st.info("To use live voice recording, run this app locally using `streamlit run app.py`")
+        return
+        
     try:
         # Record audio
         audio_data = record_audio()
@@ -241,11 +255,18 @@ def main():
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                if st.button("🎤 Start Recording", key="start_recording"):
-                    live_translation(source_lang, target_lang, languages)
+                if not check_audio_available():
+                    st.warning("🎤 Live recording not available in cloud")
+                    st.button("🎤 Start Recording", key="start_recording", disabled=True)
+                else:
+                    if st.button("🎤 Start Recording", key="start_recording"):
+                        live_translation(source_lang, target_lang, languages)
             
             with col2:
-                st.info("Click the button and speak for 5 seconds")
+                if check_audio_available():
+                    st.info("Click the button and speak for 5 seconds")
+                else:
+                    st.info("💡 Try running locally for live recording")
         
         with voice_tab2:
             # File uploader for audio
