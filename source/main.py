@@ -1,36 +1,38 @@
 import streamlit as st
 from deep_translator import GoogleTranslator
-from gtts import gTTS
 import speech_recognition as sr
-from io import BytesIO
+from gtts import gTTS
+import pygame
+import os
 import time
-import base64
-import sounddevice as sd
-import numpy as np
-import wave
-import io
+import tempfile
 
-def autoplay_audio(audio_bytes):
-    """Autoplay audio in streamlit"""
-    b64 = base64.b64encode(audio_bytes).decode()
-    md = f"""
-        <audio autoplay>
-        <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
-        </audio>
-    """
-    st.markdown(md, unsafe_allow_html=True)
-
-def text_to_speech(text, lang):
-    """Convert text to speech"""
-    try:
-        audio_bytes = BytesIO()
-        tts = gTTS(text=text, lang=lang, slow=False)
-        tts.write_to_fp(audio_bytes)
-        audio_bytes.seek(0)
-        return audio_bytes.read()
-    except Exception as e:
-        st.error(f"Text-to-speech error: {str(e)}")
-        return None
+class AudioPlayer:
+    def __init__(self):
+        pygame.mixer.init()
+        
+    def play_text(self, text, lang='en'):
+        try:
+            # Create temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as fp:
+                temp_filename = fp.name
+                
+            # Generate speech
+            tts = gTTS(text=text, lang=lang, slow=False)
+            tts.save(temp_filename)
+            
+            # Play audio
+            pygame.mixer.music.load(temp_filename)
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                pygame.time.Clock().tick(10)
+                
+            # Cleanup
+            pygame.mixer.music.unload()
+            os.unlink(temp_filename)
+            
+        except Exception as e:
+            st.error(f"Audio playback error: {str(e)}")
 
 def translate_text(text, src_lang, dest_lang, retries=3):
     """Enhanced translation with better error handling and retries"""
@@ -54,103 +56,41 @@ def translate_text(text, src_lang, dest_lang, retries=3):
             
     return None
 
-def record_audio(duration=5, sample_rate=16000):
-    """Record audio from microphone"""
+def initialize_recognizer():
+    """Initialize speech recognizer"""
+    recognizer = sr.Recognizer()
+    recognizer.dynamic_energy_threshold = True
+    recognizer.energy_threshold = 4000
+    return recognizer
+
+def recognize_speech(recognizer, source):
+    """Recognize speech from microphone"""
     try:
-        st.write("🎤 Recording...")
-        audio_data = sd.rec(int(duration * sample_rate),
-                          samplerate=sample_rate,
-                          channels=1,
-                          dtype='int16')
-        sd.wait()
-        return audio_data.flatten()
-    except Exception as e:
-        st.error(f"Recording error: {str(e)}")
+        audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+        text = recognizer.recognize_google(audio)
+        return text
+    except sr.UnknownValueError:
+        st.warning("Could not understand audio")
         return None
-
-def save_audio_data(audio_data, sample_rate=16000):
-    """Convert numpy array to WAV file bytes"""
-    try:
-        byte_io = io.BytesIO()
-        with wave.open(byte_io, 'wb') as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(sample_rate)
-            wav_file.writeframes(audio_data.tobytes())
-        return byte_io
-    except Exception as e:
-        st.error(f"Audio conversion error: {str(e)}")
+    except sr.RequestError:
+        st.error("Could not request results from speech recognition service")
         return None
-
-def check_audio_available():
-    """Check if audio recording is available"""
-    try:
-        import sounddevice as sd
-        return True
-    except:
-        return False
-
-def live_translation(source_lang, target_lang, languages):
-    """Handle live voice translation"""
-    if not check_audio_available():
-        st.error("❌ Live voice recording is not available in cloud environment")
-        st.info("💡 Please use the text translation or file upload option instead")
-        st.info("To use live voice recording, run this app locally using `streamlit run app.py`")
-        return
-        
-    try:
-        # Record audio
-        audio_data = record_audio()
-        if audio_data is None:
-            return
-            
-        # Convert to WAV format
-        audio_bytes = save_audio_data(audio_data)
-        if audio_bytes is None:
-            return
-            
-        # Convert speech to text
-        recognizer = sr.Recognizer()
-        audio_bytes.seek(0)
-        with sr.AudioFile(audio_bytes) as source:
-            audio = recognizer.record(source)
-            text = recognizer.recognize_google(audio, language=languages[source_lang])
-            
-            if text:
-                st.info(f"Recognized: {text}")
-                
-                # Translate text
-                translation = translate_text(
-                    text,
-                    src_lang=languages[source_lang],
-                    dest_lang=languages[target_lang]
-                )
-                
-                if translation:
-                    st.success(f"Translation: {translation}")
-                    
-                    # Convert to speech
-                    audio_bytes = text_to_speech(translation, languages[target_lang])
-                    if audio_bytes:
-                        st.audio(audio_bytes, format='audio/mp3')
-                        autoplay_audio(audio_bytes)
-                        
-                    # Add to history
-                    st.session_state.translation_history.append({
-                        'original': text,
-                        'translated': translation,
-                        'timestamp': time.strftime("%H:%M:%S")
-                    })
-                    
     except Exception as e:
-        st.error(f"Live translation error: {str(e)}")
+        st.error(f"Speech recognition error: {str(e)}")
+        return None
 
 def main():
     st.title("VerbalLink: Global Voice Bridge")
     st.markdown("##### Interactive Multilingual Conversation Companion")
     
+    if 'audio_player' not in st.session_state:
+        st.session_state.audio_player = AudioPlayer()
+        
     if 'translation_history' not in st.session_state:
         st.session_state.translation_history = []
+        
+    if 'is_recording' not in st.session_state:
+        st.session_state.is_recording = False
         
     # Language mappings
     languages = {
@@ -188,119 +128,113 @@ def main():
     
     display_languages = languages if language_category == "All Languages" else indian_languages
     
+    source_lang = st.selectbox("Select source language:", list(display_languages.keys()))
+    target_lang = st.selectbox("Select target language:", list(display_languages.keys()))
+    
     # Add tabs for different input methods
-    tab1, tab2 = st.tabs(["Text Translation", "Voice Translation"])
+    tab1, tab2 = st.tabs(["Text Input", "Voice Input"])
     
     with tab1:
-        source_lang = st.selectbox("Select source language:", list(display_languages.keys()), key="text_source")
-        target_lang = st.selectbox("Select target language:", list(display_languages.keys()), key="text_target")
-        
+        # Text input for translation
         text_input = st.text_area("Enter text to translate:", key="text_input")
         
-        col1, col2 = st.columns([1, 1])
+        col1, col2 = st.columns(2)
         with col1:
-            translate_button = st.button("Translate Text", key="text_translate")
-        with col2:
-            speak_button = st.button("🔊 Speak Translation", key="speak_translation")
-        
-        if translate_button and text_input:
-            try:
-                src_code = languages[source_lang]
-                dest_code = languages[target_lang]
-                
-                translation = translate_text(
-                    text_input,
-                    src_lang=src_code,
-                    dest_lang=dest_code
-                )
-                
-                if translation:
-                    st.session_state.last_translation = translation
-                    st.session_state.last_lang_code = dest_code
-                    
-                    # Add to history
-                    st.session_state.translation_history.append({
-                        'original': text_input,
-                        'translated': translation,
-                        'timestamp': time.strftime("%H:%M:%S")
-                    })
-                    
-                    # Display translation
-                    st.success(
-                        f"Original ({source_lang}): {text_input}\n"
-                        f"Translated ({target_lang}): {translation}"
-                    )
-                    
-            except Exception as e:
-                st.error(f"Translation error: {str(e)}")
-        
-        if speak_button and 'last_translation' in st.session_state:
-            audio_bytes = text_to_speech(
-                st.session_state.last_translation,
-                st.session_state.last_lang_code
-            )
-            if audio_bytes:
-                autoplay_audio(audio_bytes)
-    
-    with tab2:
-        st.write("Voice Translation")
-        source_lang = st.selectbox("Select source language:", list(display_languages.keys()), key="voice_source")
-        target_lang = st.selectbox("Select target language:", list(display_languages.keys()), key="voice_target")
-        
-        # Add tabs for different voice input methods
-        voice_tab1, voice_tab2 = st.tabs(["Live Recording", "File Upload"])
-        
-        with voice_tab1:
-            st.write("Speak directly into your microphone")
-            col1, col2 = st.columns([1, 2])
-            
-            with col1:
-                if not check_audio_available():
-                    st.warning("🎤 Live recording not available in cloud")
-                    st.button("🎤 Start Recording", key="start_recording", disabled=True)
-                else:
-                    if st.button("🎤 Start Recording", key="start_recording"):
-                        live_translation(source_lang, target_lang, languages)
-            
-            with col2:
-                if check_audio_available():
-                    st.info("Click the button and speak for 5 seconds")
-                else:
-                    st.info("💡 Try running locally for live recording")
-        
-        with voice_tab2:
-            # File uploader for audio
-            audio_file = st.file_uploader("Upload audio file", type=['wav', 'mp3'])
-            
-            if audio_file:
-                try:
-                    # Convert audio to text
-                    recognizer = sr.Recognizer()
-                    with sr.AudioFile(audio_file) as source:
-                        audio = recognizer.record(source)
-                        text = recognizer.recognize_google(audio, language=languages[source_lang])
+            if st.button("Translate Text", key="text_translate"):
+                if text_input:
+                    try:
+                        src_code = languages[source_lang]
+                        dest_code = languages[target_lang]
                         
-                    if text:
-                        # Translate
                         translation = translate_text(
-                            text,
-                            src_lang=languages[source_lang],
-                            dest_lang=languages[target_lang]
+                            text_input,
+                            src_lang=src_code,
+                            dest_lang=dest_code
                         )
                         
                         if translation:
+                            # Add to history
+                            st.session_state.translation_history.append({
+                                'original': text_input,
+                                'translated': translation,
+                                'timestamp': time.strftime("%H:%M:%S")
+                            })
+                            
+                            # Display translation
+                            st.success(
+                                f"Original ({source_lang}): {text_input}\n"
+                                f"Translated ({target_lang}): {translation}"
+                            )
+                            
+                            # Play translation
+                            st.session_state.audio_player.play_text(
+                                translation,
+                                languages[target_lang]
+                            )
+                            
+                    except Exception as e:
+                        st.error(f"Translation error: {str(e)}")
+    
+    with tab2:
+        st.write("Voice Translation")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if not st.session_state.is_recording:
+                if st.button("🎤 Start Recording", type="primary"):
+                    st.session_state.is_recording = True
+                    st.rerun()
+            else:
+                if st.button("⏹️ Stop Recording", type="primary"):
+                    st.session_state.is_recording = False
+                    st.rerun()
+        
+        if st.session_state.is_recording:
+            try:
+                status_placeholder = st.empty()
+                recognizer = initialize_recognizer()
+                
+                with sr.Microphone() as source:
+                    status_placeholder.info("🎤 Listening... Speak now")
+                    text = recognize_speech(recognizer, source)
+                    
+                    if text:
+                        status_placeholder.info("🔄 Translating...")
+                        src_code = languages[source_lang]
+                        dest_code = languages[target_lang]
+                        
+                        translation = translate_text(
+                            text,
+                            src_lang=src_code,
+                            dest_lang=dest_code
+                        )
+                        
+                        if translation:
+                            # Add to history
+                            st.session_state.translation_history.append({
+                                'original': text,
+                                'translated': translation,
+                                'timestamp': time.strftime("%H:%M:%S")
+                            })
+                            
+                            # Display translation
                             st.success(
                                 f"Original ({source_lang}): {text}\n"
                                 f"Translated ({target_lang}): {translation}"
                             )
                             
-                            # Convert translation to speech
-                            audio_bytes = text_to_speech(translation, languages[target_lang])
-                            if audio_bytes:
-                                st.audio(audio_bytes, format='audio/mp3')
-                                
-                except Exception as e:
-                    st.error(f"Voice translation error: {str(e)}")
+                            # Play translation
+                            st.session_state.audio_player.play_text(
+                                translation,
+                                languages[target_lang]
+                            )
+                            
+                            st.session_state.is_recording = False
+                            status_placeholder.empty()
+                            
+            except Exception as e:
+                st.error(f"Voice translation error: {str(e)}")
+                st.session_state.is_recording = False
 
     # Clear history button
     if st.button("Clear History"):
