@@ -21,14 +21,26 @@ class AudioPlayer:
             temp_file = f"temp_{time.time()}.mp3"
             tts.save(temp_file)
             
-            # Play the audio
-            playsound(temp_file)
+            # Play the audio using pygame
+            pygame.mixer.music.load(temp_file)
+            pygame.mixer.music.play()
+            
+            # Wait for the audio to finish
+            while pygame.mixer.music.get_busy():
+                pygame.time.Clock().tick(10)
             
             # Cleanup
+            pygame.mixer.music.unload()
             os.remove(temp_file)
             
         except Exception as e:
             st.error(f"Text-to-speech error: {e}")
+
+    def __del__(self):
+        try:
+            pygame.mixer.quit()
+        except:
+            pass
 
 def initialize_recognizer():
     r = sr.Recognizer()
