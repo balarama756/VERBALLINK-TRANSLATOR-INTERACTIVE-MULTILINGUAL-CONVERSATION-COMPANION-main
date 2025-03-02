@@ -207,21 +207,29 @@ def main():
         if 'is_recording' not in st.session_state:
             st.session_state.is_recording = False
 
+        # Add microphone permission request
+        st.markdown("""
+            <div style='background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;'>
+                ℹ️ Please allow microphone access when prompted by your browser.
+                If you don't see the prompt, click the camera icon in your browser's address bar.
+            </div>
+        """, unsafe_allow_html=True)
+
         # Create columns for better button layout
         col1, col2 = st.columns([1, 3])
         
         with col1:
             # Single button for start/stop recording
             if not st.session_state.is_recording:
-                start_button = st.button("🎤 Start", type="primary", key="start_recording")
+                start_button = st.button("🎤 Start", type="primary", key="start_recording", help="Click to start recording")
                 if start_button:
                     st.session_state.is_recording = True
-                    st.rerun()
+                    st.experimental_rerun()
             else:
-                stop_button = st.button("⏹️ Stop", type="primary", key="stop_recording")
+                stop_button = st.button("⏹️ Stop", type="primary", key="stop_recording", help="Click to stop recording")
                 if stop_button:
                     st.session_state.is_recording = False
-                    st.rerun()
+                    st.experimental_rerun()
         
         # Status area
         status_area = st.empty()
@@ -229,19 +237,30 @@ def main():
         # Handle recording state
         if st.session_state.is_recording:
             try:
-                status_area.info("🎤 Listening... Speak now")
+                status_area.info("🎤 Initializing microphone...")
                 
-                # Initialize recognizer
-                recognizer = initialize_recognizer()
+                # Initialize recognizer with explicit settings
+                recognizer = sr.Recognizer()
+                recognizer.dynamic_energy_threshold = False
+                recognizer.energy_threshold = 300
+                recognizer.pause_threshold = 0.8
+                recognizer.phrase_threshold = 0.3
+                recognizer.non_speaking_duration = 0.5
                 
-                # Try to use microphone
+                # Try to use microphone with explicit device index
                 try:
-                    with sr.Microphone() as source:
+                    with sr.Microphone(device_index=None, sample_rate=16000) as source:
+                        # Adjust for ambient noise
+                        status_area.info("🎤 Adjusting for background noise...")
+                        recognizer.adjust_for_ambient_noise(source, duration=1)
+                        
+                        status_area.info("🎤 Listening... Speak now")
+                        
                         # Listen for audio
                         audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
                         
                         # Process audio
-                        status_area.info("⚙️ Processing...")
+                        status_area.info("⚙️ Processing speech...")
                         text = recognizer.recognize_google(audio)
                         
                         if text:
@@ -261,15 +280,16 @@ def main():
                                 st.session_state.is_recording = False
                                 status_area.empty()
                                 
-                except OSError:
-                    st.error("❌ Microphone not available")
-                    st.info("💡 Please check your microphone settings or use text input")
+                except OSError as e:
+                    st.error("❌ Microphone access error")
+                    st.warning("Please ensure you've granted microphone permissions in your browser")
+                    st.info("Try clicking the microphone icon in your browser's address bar")
                     st.session_state.is_recording = False
                     
             except sr.UnknownValueError:
-                status_area.warning("🔇 Could not understand audio")
+                status_area.warning("🔇 Could not understand audio. Please try speaking again.")
             except sr.RequestError:
-                status_area.error("🌐 Network error. Check your connection")
+                status_area.error("🌐 Network error. Please check your internet connection.")
             except Exception as e:
                 status_area.error(f"❌ Error: {str(e)}")
                 st.session_state.is_recording = False
