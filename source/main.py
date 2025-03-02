@@ -1,6 +1,32 @@
 import streamlit as st
 from deep_translator import GoogleTranslator
+from gtts import gTTS
+import speech_recognition as sr
+from io import BytesIO
 import time
+import base64
+
+def autoplay_audio(audio_bytes):
+    """Autoplay audio in streamlit"""
+    b64 = base64.b64encode(audio_bytes).decode()
+    md = f"""
+        <audio autoplay>
+        <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+        </audio>
+    """
+    st.markdown(md, unsafe_allow_html=True)
+
+def text_to_speech(text, lang):
+    """Convert text to speech"""
+    try:
+        audio_bytes = BytesIO()
+        tts = gTTS(text=text, lang=lang, slow=False)
+        tts.write_to_fp(audio_bytes)
+        audio_bytes.seek(0)
+        return audio_bytes.read()
+    except Exception as e:
+        st.error(f"Text-to-speech error: {str(e)}")
+        return None
 
 def translate_text(text, src_lang, dest_lang, retries=3):
     """Enhanced translation with better error handling and retries"""
@@ -67,14 +93,22 @@ def main():
     
     display_languages = languages if language_category == "All Languages" else indian_languages
     
-    source_lang = st.selectbox("Select source language:", list(display_languages.keys()))
-    target_lang = st.selectbox("Select target language:", list(display_languages.keys()))
+    # Add tabs for different input methods
+    tab1, tab2 = st.tabs(["Text Translation", "Voice Translation"])
     
-    # Text input for translation
-    text_input = st.text_area("Enter text to translate:", key="text_input")
-    
-    if st.button("Translate Text", key="text_translate"):
-        if text_input:
+    with tab1:
+        source_lang = st.selectbox("Select source language:", list(display_languages.keys()), key="text_source")
+        target_lang = st.selectbox("Select target language:", list(display_languages.keys()), key="text_target")
+        
+        text_input = st.text_area("Enter text to translate:", key="text_input")
+        
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            translate_button = st.button("Translate Text", key="text_translate")
+        with col2:
+            speak_button = st.button("🔊 Speak Translation", key="speak_translation")
+        
+        if translate_button and text_input:
             try:
                 src_code = languages[source_lang]
                 dest_code = languages[target_lang]
@@ -86,6 +120,9 @@ def main():
                 )
                 
                 if translation:
+                    st.session_state.last_translation = translation
+                    st.session_state.last_lang_code = dest_code
+                    
                     # Add to history
                     st.session_state.translation_history.append({
                         'original': text_input,
@@ -101,6 +138,52 @@ def main():
                     
             except Exception as e:
                 st.error(f"Translation error: {str(e)}")
+        
+        if speak_button and 'last_translation' in st.session_state:
+            audio_bytes = text_to_speech(
+                st.session_state.last_translation,
+                st.session_state.last_lang_code
+            )
+            if audio_bytes:
+                autoplay_audio(audio_bytes)
+    
+    with tab2:
+        st.write("Voice Translation")
+        source_lang = st.selectbox("Select source language:", list(display_languages.keys()), key="voice_source")
+        target_lang = st.selectbox("Select target language:", list(display_languages.keys()), key="voice_target")
+        
+        # File uploader for audio
+        audio_file = st.file_uploader("Upload audio file", type=['wav', 'mp3'])
+        
+        if audio_file:
+            try:
+                # Convert audio to text
+                recognizer = sr.Recognizer()
+                with sr.AudioFile(audio_file) as source:
+                    audio = recognizer.record(source)
+                    text = recognizer.recognize_google(audio, language=languages[source_lang])
+                    
+                if text:
+                    # Translate
+                    translation = translate_text(
+                        text,
+                        src_lang=languages[source_lang],
+                        dest_lang=languages[target_lang]
+                    )
+                    
+                    if translation:
+                        st.success(
+                            f"Original ({source_lang}): {text}\n"
+                            f"Translated ({target_lang}): {translation}"
+                        )
+                        
+                        # Convert translation to speech
+                        audio_bytes = text_to_speech(translation, languages[target_lang])
+                        if audio_bytes:
+                            st.audio(audio_bytes, format='audio/mp3')
+                            
+            except Exception as e:
+                st.error(f"Voice translation error: {str(e)}")
 
     # Clear history button
     if st.button("Clear History"):

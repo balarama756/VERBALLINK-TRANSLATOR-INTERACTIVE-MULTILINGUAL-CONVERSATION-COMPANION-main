@@ -1,2 +1,4 @@
 streamlit>=1.31.0
-deep-translator>=1.11.4 
+deep-translator>=1.11.4
+gTTS==2.3.1
+SpeechRecognition==3.8.1 
