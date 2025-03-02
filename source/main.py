@@ -9,9 +9,23 @@ import tempfile
 
 class AudioPlayer:
     def __init__(self):
-        pygame.mixer.init()
+        try:
+            pygame.mixer.init(devicename='default')
+        except pygame.error:
+            try:
+                # Try alternative initialization for cloud environment
+                pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
+            except pygame.error:
+                st.warning("⚠️ Audio playback not available in cloud environment")
+                self.audio_available = False
+                return
+        self.audio_available = True
         
     def play_text(self, text, lang='en'):
+        if not self.audio_available:
+            st.info("💡 Audio playback is not available in cloud environment. Text translation will still work.")
+            return
+            
         try:
             # Create temporary file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as fp:
@@ -32,7 +46,7 @@ class AudioPlayer:
             os.unlink(temp_filename)
             
         except Exception as e:
-            st.error(f"Audio playback error: {str(e)}")
+            st.warning("Audio playback not available. Text translation will still work.")
 
 def translate_text(text, src_lang, dest_lang, retries=3):
     """Enhanced translation with better error handling and retries"""
