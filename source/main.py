@@ -137,9 +137,6 @@ def main():
     if 'translation_history' not in st.session_state:
         st.session_state.translation_history = []
         
-    if 'is_recording' not in st.session_state:
-        st.session_state.is_recording = False
-
     # Language mappings
     languages = {
         'English': 'en',
@@ -185,10 +182,9 @@ def main():
     with tab1:
         text_input = st.text_area("Enter text to translate:", key="text_input")
         
-        if st.button("Translate Text"):
+        if st.button("Translate Text", key="text_translate"):
             if text_input:
                 try:
-                    # Translation logic for text input...
                     src_code = languages[source_lang]
                     dest_code = languages[target_lang]
                     
@@ -205,58 +201,54 @@ def main():
                     st.error(f"Translation error: {str(e)}")
     
     with tab2:
-        # Check for audio device first
-        if not check_audio_device():
-            st.error("No microphone detected. Voice input is not available in this environment.")
-            st.info("Please use the Text Input tab instead.")
+        st.write("Voice Translation")
+        
+        # Initialize recording state if not exists
+        if 'is_recording' not in st.session_state:
+            st.session_state.is_recording = False
+        
+        # Single button for start/stop recording
+        if not st.session_state.is_recording:
+            if st.button("Start Conversation", type="primary", key="start_recording"):
+                st.session_state.is_recording = True
+                st.rerun()
         else:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if not st.session_state.is_recording:
-                    if st.button("Start Recording", type="primary"):
-                        st.session_state.is_recording = True
-                        st.rerun()
-                else:
-                    if st.button("Stop Recording", type="primary"):
-                        st.session_state.is_recording = False
-                        st.rerun()
-            
-            if st.session_state.is_recording:
-                try:
-                    status_placeholder = st.empty()
-                    recognizer = initialize_recognizer()
+            if st.button("Stop Conversation", type="primary", key="stop_recording"):
+                st.session_state.is_recording = False
+                st.rerun()
+        
+        # Show recording status
+        if st.session_state.is_recording:
+            st.info("🎤 Listening... (Click 'Stop Conversation' when done)")
+            try:
+                recognizer = initialize_recognizer()
+                
+                with sr.Microphone() as source:
+                    audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                    text = recognizer.recognize_google(audio)
                     
-                    with sr.Microphone() as source:
-                        status_placeholder.info("Listening... Speak now.")
-                        audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                    if text:
+                        st.write("Processing...")
+                        src_code = languages[source_lang]
+                        dest_code = languages[target_lang]
                         
-                        status_placeholder.info("Processing speech...")
-                        text = recognizer.recognize_google(audio)
+                        translation = translate_text(
+                            text,
+                            src_lang=src_code,
+                            dest_lang=dest_code
+                        )
                         
-                        if text:
-                            status_placeholder.info("Translating...")
-                            src_code = languages[source_lang]
-                            dest_code = languages[target_lang]
+                        if translation:
+                            handle_translation(text, translation, source_lang, target_lang, languages)
                             
-                            translation = translate_text(
-                                text,
-                                src_lang=src_code,
-                                dest_lang=dest_code
-                            )
-                            
-                            if translation:
-                                handle_translation(text, translation, source_lang, target_lang, languages)
-                                st.session_state.is_recording = False
-                                
-                except sr.UnknownValueError:
-                    st.warning("Could not understand audio. Please try again.")
-                    st.session_state.is_recording = False
-                except sr.RequestError:
-                    st.error("Could not request results. Check your internet connection.")
-                    st.session_state.is_recording = False
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
+            except sr.UnknownValueError:
+                st.warning("Could not understand audio. Please try again.")
+            except sr.RequestError:
+                st.error("Could not request results. Check your internet connection.")
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+                if "No Default Input Device Available" in str(e):
+                    st.warning("No microphone detected. Please use text input instead.")
                     st.session_state.is_recording = False
     
     # Clear history button
