@@ -2,9 +2,29 @@ services:
   - type: web
     name: verballink-translator
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run source/main.py
+    buildCommand: |
+      apt-get update && apt-get install -y \
+        python3-pygame \
+        libasound2 \
+        libasound2-dev \
+        libasound2-plugins \
+        alsa-utils \
+        portaudio19-dev \
+        python3-all-dev \
+        libsdl2-dev \
+        libsdl2-2.0-0 \
+        libsdl2-mixer-2.0-0
+      pip install -r requirements.txt
+    startCommand: |
+      mkdir -p ~/.config/pulse
+      export SDL_AUDIODRIVER=disk
+      export AUDIODEV=null
+      streamlit run source/main.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.11
+      - key: SDL_AUDIODRIVER
+        value: disk
+      - key: AUDIODEV
+        value: null
     plan: free 
