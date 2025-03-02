@@ -218,85 +218,25 @@ def main():
     with tab2:
         st.write("Voice Translation")
         
-        # Initialize recording state if not exists
-        if 'is_recording' not in st.session_state:
-            st.session_state.is_recording = False
-
+        # Add warning about Streamlit Cloud limitations
+        st.warning("""
+            ⚠️ Voice input is currently not available in Streamlit Cloud due to browser security restrictions.
+            
+            To use voice translation:
+            1. Run this app locally using `streamlit run app.py`
+            2. Or use the Text Input tab instead
+        """)
+        
         # Create columns for recording controls
         col1, col2 = st.columns([1, 3])
         
         with col1:
-            if not st.session_state.is_recording:
-                start_button = st.button(
-                    "🎤 Start",
-                    type="primary",
-                    key="start_recording",
-                    help="Click to start recording"
-                )
-                if start_button:
-                    st.session_state.is_recording = True
-                    st.rerun()
-            else:
-                stop_button = st.button(
-                    "⏹️ Stop",
-                    type="primary",
-                    key="stop_recording",
-                    help="Click to stop recording"
-                )
-                if stop_button:
-                    st.session_state.is_recording = False
-                    st.rerun()
-
-        # Recording logic
-        if st.session_state.is_recording:
-            status_area = st.empty()
-            try:
-                status_area.info("🎤 Initializing microphone...")
-                
-                # Initialize recognizer
-                recognizer = sr.Recognizer()
-                recognizer.dynamic_energy_threshold = True
-                recognizer.energy_threshold = 4000  # Increased threshold
-                recognizer.pause_threshold = 1.0
-                
-                # Try to use microphone
-                with sr.Microphone() as source:
-                    status_area.info("🎤 Adjusting for background noise...")
-                    recognizer.adjust_for_ambient_noise(source, duration=1)
-                    
-                    status_area.info("🎤 Listening... Speak now")
-                    audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
-                    
-                    status_area.info("⚙️ Processing speech...")
-                    text = recognizer.recognize_google(audio)
-                    
-                    if text:
-                        status_area.info("🔄 Translating...")
-                        src_code = languages[source_lang]
-                        dest_code = languages[target_lang]
-                        
-                        translation = translate_text(
-                            text,
-                            src_lang=src_code,
-                            dest_lang=dest_code
-                        )
-                        
-                        if translation:
-                            handle_translation(text, translation, source_lang, target_lang, languages)
-                            st.session_state.is_recording = False
-                            status_area.empty()
-                
-            except sr.UnknownValueError:
-                status_area.warning("🔇 Could not understand audio. Please try speaking again.")
-            except sr.RequestError:
-                status_area.error("🌐 Network error. Please check your internet connection.")
-            except Exception as e:
-                if "Audio device error" in str(e):
-                    st.error("❌ Could not access microphone")
-                    st.info("Please check if your microphone is properly connected and enabled")
-                else:
-                    status_area.error(f"❌ Error: {str(e)}")
-                st.session_state.is_recording = False
+            # Disable the recording buttons with a tooltip
+            st.button(
+                "🎤 Start",
+                disabled=True,
+                help="Voice input is not available in Streamlit Cloud. Please use text input instead."
+            )
 
     # Clear history button
     if st.button("Clear History"):
