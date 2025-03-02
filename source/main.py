@@ -125,6 +125,21 @@ def check_audio_device():
     except OSError:
         return False
 
+def show_mic_permission_dialog():
+    """Show microphone permission dialog"""
+    return st.dialog("""
+        ### 🎤 Microphone Access Required
+        
+        To use voice translation:
+        1. Click "Allow" when your browser asks for microphone permissions
+        2. If you don't see the prompt, click the camera/microphone icon in your browser's address bar
+        3. Select your microphone from the list
+        
+        Would you like to enable microphone access now?
+        """,
+        on_close=lambda: None
+    )
+
 def main():
     st.title("VerbalLink: Global Voice Bridge")
     
@@ -203,52 +218,69 @@ def main():
     with tab2:
         st.write("Voice Translation")
         
-        # Initialize recording state if not exists
+        # Initialize states
         if 'is_recording' not in st.session_state:
             st.session_state.is_recording = False
+        if 'mic_permission_shown' not in st.session_state:
+            st.session_state.mic_permission_shown = False
 
-        # Add microphone permission request
-        st.markdown("""
-            <div style='background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;'>
-                ℹ️ Please allow microphone access when prompted by your browser.
-                If you don't see the prompt, click the camera icon in your browser's address bar.
-            </div>
-        """, unsafe_allow_html=True)
+        # Show permission dialog first time
+        if not st.session_state.mic_permission_shown:
+            st.info("🎤 Voice translation requires microphone access")
+            if st.button("Enable Microphone Access", type="primary"):
+                st.session_state.mic_permission_shown = True
+                st.rerun()
+        else:
+            # Create columns for recording controls
+            col1, col2 = st.columns([1, 3])
+            
+            with col1:
+                if not st.session_state.is_recording:
+                    start_button = st.button(
+                        "🎤 Start", 
+                        type="primary",
+                        key="start_recording",
+                        help="Click to start recording"
+                    )
+                    if start_button:
+                        # Try to initialize microphone
+                        try:
+                            with sr.Microphone() as source:
+                                st.session_state.is_recording = True
+                                st.rerun()
+                        except OSError:
+                            st.error("❌ Microphone access denied")
+                            st.warning("""
+                                Please enable microphone access:
+                                1. Click the camera/microphone icon in your browser's address bar
+                                2. Select 'Allow' for microphone access
+                                3. Refresh this page
+                            """)
+                else:
+                    stop_button = st.button(
+                        "⏹️ Stop",
+                        type="primary",
+                        key="stop_recording",
+                        help="Click to stop recording"
+                    )
+                    if stop_button:
+                        st.session_state.is_recording = False
+                        st.rerun()
 
-        # Create columns for better button layout
-        col1, col2 = st.columns([1, 3])
-        
-        with col1:
-            # Single button for start/stop recording
-            if not st.session_state.is_recording:
-                start_button = st.button("🎤 Start", type="primary", key="start_recording", help="Click to start recording")
-                if start_button:
-                    st.session_state.is_recording = True
-                    st.rerun()
-            else:
-                stop_button = st.button("⏹️ Stop", type="primary", key="stop_recording", help="Click to stop recording")
-                if stop_button:
-                    st.session_state.is_recording = False
-                    st.rerun()
-        
-        # Status area
-        status_area = st.empty()
-        
-        # Handle recording state
-        if st.session_state.is_recording:
-            try:
-                status_area.info("🎤 Initializing microphone...")
-                
-                # Initialize recognizer with explicit settings
-                recognizer = sr.Recognizer()
-                recognizer.dynamic_energy_threshold = False
-                recognizer.energy_threshold = 300
-                recognizer.pause_threshold = 0.8
-                recognizer.phrase_threshold = 0.3
-                recognizer.non_speaking_duration = 0.5
-                
-                # Try to use microphone with explicit device index
+            # Rest of the recording logic...
+            if st.session_state.is_recording:
+                status_area = st.empty()
                 try:
+                    status_area.info("🎤 Initializing microphone...")
+                    
+                    # Initialize recognizer with explicit settings
+                    recognizer = sr.Recognizer()
+                    recognizer.dynamic_energy_threshold = False
+                    recognizer.energy_threshold = 300
+                    recognizer.pause_threshold = 0.8
+                    recognizer.phrase_threshold = 0.3
+                    recognizer.non_speaking_duration = 0.5
+                    
                     with sr.Microphone(device_index=None, sample_rate=16000) as source:
                         # Adjust for ambient noise
                         status_area.info("🎤 Adjusting for background noise...")
@@ -280,20 +312,18 @@ def main():
                                 st.session_state.is_recording = False
                                 status_area.empty()
                                 
-                except OSError as e:
+                except sr.UnknownValueError:
+                    status_area.warning("🔇 Could not understand audio. Please try speaking again.")
+                except sr.RequestError:
+                    status_area.error("🌐 Network error. Please check your internet connection.")
+                except OSError:
                     st.error("❌ Microphone access error")
-                    st.warning("Please ensure you've granted microphone permissions in your browser")
-                    st.info("Try clicking the microphone icon in your browser's address bar")
+                    st.warning("Please ensure you've granted microphone permissions")
                     st.session_state.is_recording = False
-                    
-            except sr.UnknownValueError:
-                status_area.warning("🔇 Could not understand audio. Please try speaking again.")
-            except sr.RequestError:
-                status_area.error("🌐 Network error. Please check your internet connection.")
-            except Exception as e:
-                status_area.error(f"❌ Error: {str(e)}")
-                st.session_state.is_recording = False
-    
+                except Exception as e:
+                    status_area.error(f"❌ Error: {str(e)}")
+                    st.session_state.is_recording = False
+
     # Clear history button
     if st.button("Clear History"):
         st.session_state.translation_history = []
