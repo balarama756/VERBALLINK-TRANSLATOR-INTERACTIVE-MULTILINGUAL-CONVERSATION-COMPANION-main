@@ -128,7 +128,10 @@ def main():
         
     if 'translation_history' not in st.session_state:
         st.session_state.translation_history = []
-    
+        
+    if 'is_recording' not in st.session_state:
+        st.session_state.is_recording = False
+
     # Language mappings
     languages = {
         'English': 'en',
@@ -168,16 +171,16 @@ def main():
     source_lang = st.selectbox("Select source language:", list(display_languages.keys()))
     target_lang = st.selectbox("Select target language:", list(display_languages.keys()))
     
-    # Add text input as an alternative to microphone
-    text_input = st.text_area("Enter text to translate:", key="text_input")
+    # Add tabs for different input methods
+    tab1, tab2 = st.tabs(["Text Input", "Voice Input"])
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
+    with tab1:
+        text_input = st.text_area("Enter text to translate:", key="text_input")
+        
         if st.button("Translate Text"):
             if text_input:
                 try:
-                    # Get language codes
+                    # Translation logic for text input...
                     src_code = languages[source_lang]
                     dest_code = languages[target_lang]
                     
@@ -188,32 +191,65 @@ def main():
                     )
                     
                     if translation:
-                        # Add to history
-                        st.session_state.translation_history.append({
-                            'original': text_input,
-                            'translated': translation,
-                            'timestamp': time.strftime("%H:%M:%S")
-                        })
-                        
-                        # Display translation
-                        st.success(
-                            f"Original ({source_lang}): {text_input}\n"
-                            f"Translated ({target_lang}): {translation}"
-                        )
-                        
-                        # Speak translation
-                        st.session_state.audio_player.play_text(
-                            translation,
-                            languages[target_lang]
-                        )
+                        handle_translation(text_input, translation, source_lang, target_lang, languages)
                         
                 except Exception as e:
                     st.error(f"Translation error: {str(e)}")
     
-    with col2:
-        if st.button("Clear History"):
-            st.session_state.translation_history = []
-            st.rerun()
+    with tab2:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if not st.session_state.is_recording:
+                if st.button("Start Recording", type="primary"):
+                    st.session_state.is_recording = True
+                    st.rerun()
+            else:
+                if st.button("Stop Recording", type="primary"):
+                    st.session_state.is_recording = False
+                    st.rerun()
+        
+        if st.session_state.is_recording:
+            try:
+                status_placeholder = st.empty()
+                recognizer = initialize_recognizer()
+                
+                with sr.Microphone() as source:
+                    status_placeholder.info("Listening... Speak now.")
+                    audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                    
+                    status_placeholder.info("Processing speech...")
+                    text = recognizer.recognize_google(audio)
+                    
+                    if text:
+                        status_placeholder.info("Translating...")
+                        src_code = languages[source_lang]
+                        dest_code = languages[target_lang]
+                        
+                        translation = translate_text(
+                            text,
+                            src_lang=src_code,
+                            dest_lang=dest_code
+                        )
+                        
+                        if translation:
+                            handle_translation(text, translation, source_lang, target_lang, languages)
+                            st.session_state.is_recording = False
+                            
+            except sr.UnknownValueError:
+                st.warning("Could not understand audio. Please try again.")
+                st.session_state.is_recording = False
+            except sr.RequestError:
+                st.error("Could not request results. Check your internet connection.")
+                st.session_state.is_recording = False
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+                st.session_state.is_recording = False
+    
+    # Clear history button
+    if st.button("Clear History"):
+        st.session_state.translation_history = []
+        st.rerun()
     
     # Display translation history
     if st.session_state.translation_history:
@@ -222,6 +258,27 @@ def main():
             st.text(f"[{item['timestamp']}]")
             st.info(f"Original: {item['original']}")
             st.success(f"Translated: {item['translated']}")
+
+def handle_translation(original_text, translation, source_lang, target_lang, languages):
+    """Helper function to handle translation results"""
+    # Add to history
+    st.session_state.translation_history.append({
+        'original': original_text,
+        'translated': translation,
+        'timestamp': time.strftime("%H:%M:%S")
+    })
+    
+    # Display translation
+    st.success(
+        f"Original ({source_lang}): {original_text}\n"
+        f"Translated ({target_lang}): {translation}"
+    )
+    
+    # Speak translation
+    st.session_state.audio_player.play_text(
+        translation,
+        languages[target_lang]
+    )
 
 if __name__ == "__main__":
     main() 
