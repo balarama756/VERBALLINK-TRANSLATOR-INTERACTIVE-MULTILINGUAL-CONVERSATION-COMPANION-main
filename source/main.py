@@ -218,111 +218,85 @@ def main():
     with tab2:
         st.write("Voice Translation")
         
-        # Initialize states
+        # Initialize recording state if not exists
         if 'is_recording' not in st.session_state:
             st.session_state.is_recording = False
-        if 'mic_permission_shown' not in st.session_state:
-            st.session_state.mic_permission_shown = False
 
-        # Show permission dialog first time
-        if not st.session_state.mic_permission_shown:
-            st.info("🎤 Voice translation requires microphone access")
-            if st.button("Enable Microphone Access", type="primary"):
-                st.session_state.mic_permission_shown = True
-                st.rerun()
-        else:
-            # Create columns for recording controls
-            col1, col2 = st.columns([1, 3])
-            
-            with col1:
-                if not st.session_state.is_recording:
-                    start_button = st.button(
-                        "🎤 Start", 
-                        type="primary",
-                        key="start_recording",
-                        help="Click to start recording"
-                    )
-                    if start_button:
-                        # Try to initialize microphone
-                        try:
-                            with sr.Microphone() as source:
-                                st.session_state.is_recording = True
-                                st.rerun()
-                        except OSError:
-                            st.error("❌ Microphone access denied")
-                            st.warning("""
-                                Please enable microphone access:
-                                1. Click the camera/microphone icon in your browser's address bar
-                                2. Select 'Allow' for microphone access
-                                3. Refresh this page
-                            """)
+        # Create columns for recording controls
+        col1, col2 = st.columns([1, 3])
+        
+        with col1:
+            if not st.session_state.is_recording:
+                start_button = st.button(
+                    "🎤 Start",
+                    type="primary",
+                    key="start_recording",
+                    help="Click to start recording"
+                )
+                if start_button:
+                    st.session_state.is_recording = True
+                    st.rerun()
+            else:
+                stop_button = st.button(
+                    "⏹️ Stop",
+                    type="primary",
+                    key="stop_recording",
+                    help="Click to stop recording"
+                )
+                if stop_button:
+                    st.session_state.is_recording = False
+                    st.rerun()
+
+        # Recording logic
+        if st.session_state.is_recording:
+            status_area = st.empty()
+            try:
+                status_area.info("🎤 Initializing microphone...")
+                
+                # Initialize recognizer
+                recognizer = sr.Recognizer()
+                recognizer.dynamic_energy_threshold = True
+                recognizer.energy_threshold = 4000  # Increased threshold
+                recognizer.pause_threshold = 1.0
+                
+                # Try to use microphone
+                with sr.Microphone() as source:
+                    status_area.info("🎤 Adjusting for background noise...")
+                    recognizer.adjust_for_ambient_noise(source, duration=1)
+                    
+                    status_area.info("🎤 Listening... Speak now")
+                    audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                    
+                    status_area.info("⚙️ Processing speech...")
+                    text = recognizer.recognize_google(audio)
+                    
+                    if text:
+                        status_area.info("🔄 Translating...")
+                        src_code = languages[source_lang]
+                        dest_code = languages[target_lang]
+                        
+                        translation = translate_text(
+                            text,
+                            src_lang=src_code,
+                            dest_lang=dest_code
+                        )
+                        
+                        if translation:
+                            handle_translation(text, translation, source_lang, target_lang, languages)
+                            st.session_state.is_recording = False
+                            status_area.empty()
+                
+            except sr.UnknownValueError:
+                status_area.warning("🔇 Could not understand audio. Please try speaking again.")
+            except sr.RequestError:
+                status_area.error("🌐 Network error. Please check your internet connection.")
+            except Exception as e:
+                if "Audio device error" in str(e):
+                    st.error("❌ Could not access microphone")
+                    st.info("Please check if your microphone is properly connected and enabled")
                 else:
-                    stop_button = st.button(
-                        "⏹️ Stop",
-                        type="primary",
-                        key="stop_recording",
-                        help="Click to stop recording"
-                    )
-                    if stop_button:
-                        st.session_state.is_recording = False
-                        st.rerun()
-
-            # Rest of the recording logic...
-            if st.session_state.is_recording:
-                status_area = st.empty()
-                try:
-                    status_area.info("🎤 Initializing microphone...")
-                    
-                    # Initialize recognizer with explicit settings
-                    recognizer = sr.Recognizer()
-                    recognizer.dynamic_energy_threshold = False
-                    recognizer.energy_threshold = 300
-                    recognizer.pause_threshold = 0.8
-                    recognizer.phrase_threshold = 0.3
-                    recognizer.non_speaking_duration = 0.5
-                    
-                    with sr.Microphone(device_index=None, sample_rate=16000) as source:
-                        # Adjust for ambient noise
-                        status_area.info("🎤 Adjusting for background noise...")
-                        recognizer.adjust_for_ambient_noise(source, duration=1)
-                        
-                        status_area.info("🎤 Listening... Speak now")
-                        
-                        # Listen for audio
-                        audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
-                        
-                        # Process audio
-                        status_area.info("⚙️ Processing speech...")
-                        text = recognizer.recognize_google(audio)
-                        
-                        if text:
-                            # Translate
-                            status_area.info("🔄 Translating...")
-                            src_code = languages[source_lang]
-                            dest_code = languages[target_lang]
-                            
-                            translation = translate_text(
-                                text,
-                                src_lang=src_code,
-                                dest_lang=dest_code
-                            )
-                            
-                            if translation:
-                                handle_translation(text, translation, source_lang, target_lang, languages)
-                                st.session_state.is_recording = False
-                                status_area.empty()
-                                
-                except sr.UnknownValueError:
-                    status_area.warning("🔇 Could not understand audio. Please try speaking again.")
-                except sr.RequestError:
-                    status_area.error("🌐 Network error. Please check your internet connection.")
-                except OSError:
-                    st.error("❌ Microphone access error")
-                    st.warning("Please ensure you've granted microphone permissions")
-                    st.session_state.is_recording = False
-                except Exception as e:
                     status_area.error(f"❌ Error: {str(e)}")
-                    st.session_state.is_recording = False
+                st.session_state.is_recording = False
 
     # Clear history button
     if st.button("Clear History"):
