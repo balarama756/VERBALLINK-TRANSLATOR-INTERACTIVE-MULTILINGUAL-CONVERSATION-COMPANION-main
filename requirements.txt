@@ -4,4 +4,5 @@ streamlit>=1.31.0
 googletrans==3.1.0a0
 numpy<2.0.0
 PyAudio==0.2.11
+playsound==1.2.2
 setuptools>=41.0.0 
