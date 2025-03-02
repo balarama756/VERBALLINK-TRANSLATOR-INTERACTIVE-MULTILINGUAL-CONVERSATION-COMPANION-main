@@ -224,12 +224,12 @@ def main():
                 start_button = st.button("🎤 Start", type="primary", key="start_recording", help="Click to start recording")
                 if start_button:
                     st.session_state.is_recording = True
-                    st.experimental_rerun()
+                    st.rerun()
             else:
                 stop_button = st.button("⏹️ Stop", type="primary", key="stop_recording", help="Click to stop recording")
                 if stop_button:
                     st.session_state.is_recording = False
-                    st.experimental_rerun()
+                    st.rerun()
         
         # Status area
         status_area = st.empty()
