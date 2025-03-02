@@ -117,6 +117,14 @@ def translate_text(text, src_lang, dest_lang, retries=3):
             
     return None
 
+def check_audio_device():
+    """Check if audio input device is available"""
+    try:
+        with sr.Microphone() as source:
+            return True
+    except OSError:
+        return False
+
 def main():
     st.title("VerbalLink: Global Voice Bridge")
     
@@ -197,54 +205,59 @@ def main():
                     st.error(f"Translation error: {str(e)}")
     
     with tab2:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if not st.session_state.is_recording:
-                if st.button("Start Recording", type="primary"):
-                    st.session_state.is_recording = True
-                    st.rerun()
-            else:
-                if st.button("Stop Recording", type="primary"):
-                    st.session_state.is_recording = False
-                    st.rerun()
-        
-        if st.session_state.is_recording:
-            try:
-                status_placeholder = st.empty()
-                recognizer = initialize_recognizer()
-                
-                with sr.Microphone() as source:
-                    status_placeholder.info("Listening... Speak now.")
-                    audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+        # Check for audio device first
+        if not check_audio_device():
+            st.error("No microphone detected. Voice input is not available in this environment.")
+            st.info("Please use the Text Input tab instead.")
+        else:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if not st.session_state.is_recording:
+                    if st.button("Start Recording", type="primary"):
+                        st.session_state.is_recording = True
+                        st.rerun()
+                else:
+                    if st.button("Stop Recording", type="primary"):
+                        st.session_state.is_recording = False
+                        st.rerun()
+            
+            if st.session_state.is_recording:
+                try:
+                    status_placeholder = st.empty()
+                    recognizer = initialize_recognizer()
                     
-                    status_placeholder.info("Processing speech...")
-                    text = recognizer.recognize_google(audio)
-                    
-                    if text:
-                        status_placeholder.info("Translating...")
-                        src_code = languages[source_lang]
-                        dest_code = languages[target_lang]
+                    with sr.Microphone() as source:
+                        status_placeholder.info("Listening... Speak now.")
+                        audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
                         
-                        translation = translate_text(
-                            text,
-                            src_lang=src_code,
-                            dest_lang=dest_code
-                        )
+                        status_placeholder.info("Processing speech...")
+                        text = recognizer.recognize_google(audio)
                         
-                        if translation:
-                            handle_translation(text, translation, source_lang, target_lang, languages)
-                            st.session_state.is_recording = False
+                        if text:
+                            status_placeholder.info("Translating...")
+                            src_code = languages[source_lang]
+                            dest_code = languages[target_lang]
                             
-            except sr.UnknownValueError:
-                st.warning("Could not understand audio. Please try again.")
-                st.session_state.is_recording = False
-            except sr.RequestError:
-                st.error("Could not request results. Check your internet connection.")
-                st.session_state.is_recording = False
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
-                st.session_state.is_recording = False
+                            translation = translate_text(
+                                text,
+                                src_lang=src_code,
+                                dest_lang=dest_code
+                            )
+                            
+                            if translation:
+                                handle_translation(text, translation, source_lang, target_lang, languages)
+                                st.session_state.is_recording = False
+                                
+                except sr.UnknownValueError:
+                    st.warning("Could not understand audio. Please try again.")
+                    st.session_state.is_recording = False
+                except sr.RequestError:
+                    st.error("Could not request results. Check your internet connection.")
+                    st.session_state.is_recording = False
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+                    st.session_state.is_recording = False
     
     # Clear history button
     if st.button("Clear History"):
