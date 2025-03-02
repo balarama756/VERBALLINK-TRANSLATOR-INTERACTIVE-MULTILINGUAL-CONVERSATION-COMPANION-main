@@ -7,6 +7,7 @@ import time
 import sounddevice as sd
 import soundfile as sf
 from io import BytesIO
+import numpy as np
 
 class AudioPlayer:
     def __init__(self):
@@ -44,6 +45,15 @@ def initialize_recognizer():
     r.energy_threshold = 300
     r.pause_threshold = 0.6
     return r
+
+def record_audio(duration=5, sample_rate=16000):
+    """Record audio using sounddevice"""
+    recording = sd.rec(int(duration * sample_rate),
+                      samplerate=sample_rate,
+                      channels=1,
+                      dtype='int16')
+    sd.wait()
+    return recording.flatten()
 
 def recognize_speech(recognizer, source):
     """Enhanced speech recognition with multiple attempts"""

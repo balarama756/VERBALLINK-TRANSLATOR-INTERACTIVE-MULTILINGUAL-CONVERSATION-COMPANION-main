@@ -3,7 +3,8 @@ SpeechRecognition==3.8.1
 gTTS==2.3.1
 googletrans==3.1.0a0
 numpy<2.0.0
-PyAudio==0.2.11
 sounddevice==0.4.6
 soundfile==0.12.1
-setuptools>=41.0.0 
+setuptools>=41.0.0
+# Alternative to PyAudio
+python-sounddevice 

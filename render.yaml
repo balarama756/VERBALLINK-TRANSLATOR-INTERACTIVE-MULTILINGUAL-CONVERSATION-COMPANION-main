@@ -2,7 +2,9 @@ services:
   - type: web
     name: verballink-translator
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      apt-get update && apt-get install -y portaudio19-dev python3-all-dev libsndfile1 libasound2-dev
+      pip install -r requirements.txt
     startCommand: streamlit run source/main.py
     envVars:
       - key: PYTHON_VERSION
