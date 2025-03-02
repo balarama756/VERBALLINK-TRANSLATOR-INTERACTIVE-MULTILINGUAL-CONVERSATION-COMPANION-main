@@ -5,6 +5,4 @@ googletrans==3.1.0a0
 numpy<2.0.0
 sounddevice==0.4.6
 soundfile==0.12.1
-setuptools>=41.0.0
-# Alternative to PyAudio
-python-sounddevice 
+setuptools>=41.0.0 
